@@ -1,65 +1,164 @@
-import Image from "next/image";
+"use client";
 
+import { useMemo, useState } from "react";
+
+// Tipo de mensaje usado en el frontend
+type ChatMsg = { speaker: "openai" | "llama"; content: string };
+
+/**
+ * Componente principal de la página
+ */
 export default function Home() {
+  /**
+   * Estados del componente
+   */
+  const [topic, setTopic] = useState("CSS flexbox y diseño responsive");
+  const [history, setHistory] = useState<ChatMsg[]>([]);
+  const [turn, setTurn] = useState<"openai" | "llama">("openai");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Límite máximo de mensajes
+  const MAX_TURNS = 10;
+
+  /**
+   * Título dinámico
+   */
+  const title = useMemo(() => {
+    return `Conversación LLM vs LLM · Turno: ${history.length} / ${MAX_TURNS}`;
+  }, [history.length]);
+
+  /**
+   * FUNCIÓN PRINCIPAL
+   * Controla la lógica de turnos y el límite de 10 mensajes
+   */
+  async function nextTurn() {
+    // 1. Validar si ya se llegó al límite
+    if (history.length >= MAX_TURNS) {
+      alert("Se ha alcanzado el límite de 10 mensajes.");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 2. Elegir endpoint
+      const endpoint = turn === "openai" ? "/api/openai-turn" : "/api/llama-turn";
+
+      // 3. Llamada al backend
+      const res = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ history, topic }),
+      });
+
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || `HTTP ${res.status}`);
+      }
+
+      const msg = (await res.json()) as ChatMsg;
+
+      // 4. Actualizar historial y cambiar turno
+      setHistory((h) => [...h, msg]);
+      setTurn((t) => (t === "openai" ? "llama" : "openai"));
+      
+    } catch (e: any) {
+      setError(e?.message ?? "Error desconocido");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /**
+   * Reinicia la conversación
+   */
+  function reset() {
+    setHistory([]);
+    setTurn("openai");
+    setError(null);
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <main style={{ maxWidth: 900, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
+      <h1 style={{ fontSize: 22, marginBottom: 8 }}>{title}</h1>
+
+      <p style={{ marginTop: 0, opacity: 0.8 }}>
+        La conversación se detendrá automáticamente al llegar a los 10 mensajes.
+      </p>
+
+      {/* Controles */}
+      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
+        <input
+          value={topic}
+          onChange={(e) => setTopic(e.target.value)}
+          placeholder="Tema inicial"
+          style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
+          disabled={loading || history.length > 0}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+
+        <button
+          onClick={() => nextTurn()}
+          // El botón se deshabilita si está cargando O si ya llegó a 10
+          disabled={loading || history.length >= MAX_TURNS}
+          style={{
+            padding: "10px 14px",
+            borderRadius: 8,
+            border: "1px solid #ccc",
+            cursor: (loading || history.length >= MAX_TURNS) ? "not-allowed" : "pointer",
+            backgroundColor: history.length >= MAX_TURNS ? "#f0f0f0" : "#fff"
+          }}
+        >
+          {loading ? "Generando..." : history.length >= MAX_TURNS ? "Límite alcanzado" : "Siguiente turno"}
+        </button>
+
+        <button
+          onClick={reset}
+          disabled={loading}
+          style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #ccc", cursor: "pointer" }}
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* Error */}
+      {error && (
+        <div style={{ padding: 12, borderRadius: 8, border: "1px solid #f99", marginBottom: 12, color: "#d33" }}>
+          <strong>Error:</strong> {error}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+      )}
+
+      {/* Chat */}
+      <div style={{
+        minHeight: 360,
+        padding: 12,
+        borderRadius: 12,
+        border: "1px solid #ddd",
+        background: "#fafafa",
+        overflowY: "auto"
+      }}>
+        {history.length === 0 ? (
+          <div style={{ opacity: 0.6 }}>Pulsa “Siguiente turno” para comenzar.</div>
+        ) : (
+          history.map((m, i) => (
+            <div key={i} style={{
+              marginBottom: 10,
+              padding: 10,
+              borderRadius: 10,
+              border: "1px solid #e5e5e5",
+              background: m.speaker === "openai" ? "#f0f7ff" : "white",
+              marginLeft: m.speaker === "openai" ? "20px" : "0",
+              marginRight: m.speaker === "llama" ? "20px" : "0",
+            }}>
+              <div style={{ fontSize: 11, fontWeight: "bold", opacity: 0.7, marginBottom: 4 }}>
+                {m.speaker.toUpperCase()}
+              </div>
+              <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
+            </div>
+          ))
+        )}
+      </div>
+    </main>
   );
 }
