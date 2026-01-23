@@ -27,8 +27,8 @@ export async function POST(req: Request) {
         {
           role: "system",
           content:
-            "Eres un LLM participando en una conversación alternada con otro LLM. " +
-            "Responde en 2-4 frases. No hagas preguntas al usuario; habla al otro modelo.",
+
+            "Responde en 1 frase, habla como un sith que esta hablando con un jedi.",
         },
         {
           role: "user",

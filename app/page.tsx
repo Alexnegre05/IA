@@ -1,162 +1,196 @@
 "use client";
 
-import { useMemo, useState } from "react";
+// Importaciones de Shadcn UI necesarias
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
+// Asegúrate de que el path a ChatBubble sea correcto
+import { ChatBubble } from "@/components/ui/chart-bubble"; 
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, MessageSquare, RefreshCw, Zap } from "lucide-react";
 
 // Tipo de mensaje usado en el frontend
 type ChatMsg = { speaker: "openai" | "llama"; content: string };
 
-/**
- * Componente principal de la página
- */
 export default function Home() {
-  /**
-   * Estados del componente
-   */
-  const [topic, setTopic] = useState("CSS flexbox y diseño responsive");
+  const [topic, setTopic] = useState("explicame algo sobre star wars");
   const [history, setHistory] = useState<ChatMsg[]>([]);
   const [turn, setTurn] = useState<"openai" | "llama">("openai");
+  const [running, setRunning] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Límite máximo de mensajes
+  // Asegúrate de que esto es HTMLDivElement, no HTMLDivSement como en el ejemplo anterior
+  const chatRef = useRef<HTMLDivElement>(null); 
   const MAX_TURNS = 10;
 
-  /**
-   * Título dinámico
-   */
-  const title = useMemo(() => {
-    return `Conversación LLM vs LLM · Turno: ${history.length} / ${MAX_TURNS}`;
-  }, [history.length]);
+  const progressValue = useMemo(() => (history.length / MAX_TURNS) * 100, [history.length, MAX_TURNS]);
 
   /**
-   * FUNCIÓN PRINCIPAL
-   * Controla la lógica de turnos y el límite de 10 mensajes
+   * Inicia la conversación (UN SOLO CLICK)
    */
-  async function nextTurn() {
-    // 1. Validar si ya se llegó al límite
-    if (history.length >= MAX_TURNS) {
-      alert("Se ha alcanzado el límite de 10 mensajes.");
-      return;
-    }
-
-    setLoading(true);
-    setError(null);
-
-    try {
-      // 2. Elegir endpoint
-      const endpoint = turn === "openai" ? "/api/openai-turn" : "/api/llama-turn";
-
-      // 3. Llamada al backend
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ history, topic }),
-      });
-
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(txt || `HTTP ${res.status}`);
-      }
-
-      const msg = (await res.json()) as ChatMsg;
-
-      // 4. Actualizar historial y cambiar turno
-      setHistory((h) => [...h, msg]);
-      setTurn((t) => (t === "openai" ? "llama" : "openai"));
-      
-    } catch (e: any) {
-      setError(e?.message ?? "Error desconocido");
-    } finally {
-      setLoading(false);
-    }
+  function startConversation() {
+    if (running || history.length > 0) return;
+    setRunning(true);
   }
 
   /**
-   * Reinicia la conversación
+   * Lógica automática de turnos
+   */
+  useEffect(() => {
+    if (!running) return;
+    if (history.length >= MAX_TURNS) {
+      setRunning(false);
+      return;
+    }
+
+    async function generateTurn() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const endpoint =
+          turn === "openai" ? "/api/openai-turn" : "/api/llama-turn";
+
+        const res = await fetch(endpoint, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ history, topic }),
+        });
+
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt || `HTTP ${res.status}`);
+        }
+
+        const msg = (await res.json()) as ChatMsg;
+
+        setHistory((h) => [...h, msg]);
+        setTurn((t) => (t === "openai" ? "llama" : "openai"));
+      } catch (e: any) {
+        setError(e?.message ?? "Error desconocido");
+        setRunning(false);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    const timeout = setTimeout(generateTurn, 800);
+    return () => clearTimeout(timeout);
+  }, [running, history.length, turn, topic]);
+
+  /**
+   * Scroll automático al último mensaje
+   */
+  useEffect(() => {
+    chatRef.current?.scrollTo({
+      top: chatRef.current.scrollHeight,
+      behavior: "smooth",
+    });
+  }, [history]);
+
+  /**
+   * Reset
    */
   function reset() {
     setHistory([]);
     setTurn("openai");
+    setRunning(false);
     setError(null);
   }
 
   return (
-    <main style={{ maxWidth: 900, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
-      <h1 style={{ fontSize: 22, marginBottom: 8 }}>{title}</h1>
+    // Contenedor principal con estética moderna
+    <main className="max-w-4xl mx-auto p-4 md:p-8 bg-gray-50 min-h-screen">
+      
+      {/* Header y Progreso */}
+      <Card className="p-6 mb-6 shadow-lg">
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-bold flex items-center text-gray-800">
+            <MessageSquare className="mr-3 h-6 w-6 text-blue-600" />
+            Conversación LLM vs LLM
+          </h1>
+          <Badge variant="secondary" className="text-sm">
+            {history.length} / {MAX_TURNS} turnos
+          </Badge>
+        </div>
+        {/* Barra de progreso personalizada */}
+        <Progress 
+          value={progressValue} 
+          className="w-full h-2" 
+          indicatorClassName={running ? "bg-blue-500 animate-pulse" : (history.length === MAX_TURNS ? "bg-green-500" : "bg-gray-200")} 
+        />
+      </Card>
 
-      <p style={{ marginTop: 0, opacity: 0.8 }}>
-        La conversación se detendrá automáticamente al llegar a los 10 mensajes.
-      </p>
 
       {/* Controles */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 12 }}>
-        <input
+      <div className="flex gap-3 mb-6">
+        <Input
           value={topic}
           onChange={(e) => setTopic(e.target.value)}
-          placeholder="Tema inicial"
-          style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #ccc" }}
-          disabled={loading || history.length > 0}
+          placeholder="Tema inicial de la conversación"
+          disabled={running || history.length > 0}
+          className="flex-1 shadow-sm"
         />
 
-        <button
-          onClick={() => nextTurn()}
-          // El botón se deshabilita si está cargando O si ya llegó a 10
-          disabled={loading || history.length >= MAX_TURNS}
-          style={{
-            padding: "10px 14px",
-            borderRadius: 8,
-            border: "1px solid #ccc",
-            cursor: (loading || history.length >= MAX_TURNS) ? "not-allowed" : "pointer",
-            backgroundColor: history.length >= MAX_TURNS ? "#f0f0f0" : "#fff"
-          }}
+        <Button
+          onClick={startConversation}
+          disabled={running || history.length > 0}
+          variant={running || history.length > 0 ? "outline" : "default"}
+          className="shadow-sm"
         >
-          {loading ? "Generando..." : history.length >= MAX_TURNS ? "Límite alcanzado" : "Siguiente turno"}
-        </button>
+          <Zap className={`mr-2 h-4 w-4 ${running ? 'animate-spin' : ''}`} />
+          {running ? "En curso..." : "Iniciar"}
+        </Button>
 
-        <button
+        <Button
           onClick={reset}
           disabled={loading}
-          style={{ padding: "10px 14px", borderRadius: 8, border: "1px solid #ccc", cursor: "pointer" }}
+          variant="secondary"
+          className="shadow-sm"
         >
-          Reset
-        </button>
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+        </Button>
       </div>
 
       {/* Error */}
       {error && (
-        <div style={{ padding: 12, borderRadius: 8, border: "1px solid #f99", marginBottom: 12, color: "#d33" }}>
-          <strong>Error:</strong> {error}
-        </div>
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Error de conexión</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      {/* Chat */}
-      <div style={{
-        minHeight: 360,
-        padding: 12,
-        borderRadius: 12,
-        border: "1px solid #ddd",
-        background: "#fafafa",
-        overflowY: "auto"
-      }}>
-        {history.length === 0 ? (
-          <div style={{ opacity: 0.6 }}>Pulsa “Siguiente turno” para comenzar.</div>
-        ) : (
-          history.map((m, i) => (
-            <div key={i} style={{
-              marginBottom: 10,
-              padding: 10,
-              borderRadius: 10,
-              border: "1px solid #e5e5e5",
-              background: m.speaker === "openai" ? "#f0f7ff" : "white",
-              marginLeft: m.speaker === "openai" ? "20px" : "0",
-              marginRight: m.speaker === "llama" ? "20px" : "0",
-            }}>
-              <div style={{ fontSize: 11, fontWeight: "bold", opacity: 0.7, marginBottom: 4 }}>
-                {m.speaker.toUpperCase()}
-              </div>
-              <div style={{ whiteSpace: "pre-wrap" }}>{m.content}</div>
-            </div>
-          ))
+      {/* Área del Chat - Eliminando las 2 columnas y centralizando */}
+      <Card
+        ref={chatRef}
+        // Estilo moderno de contenedor de chat
+        className="h-[500px] p-6 bg-white shadow-xl overflow-y-auto flex flex-col gap-4 border-b-0 rounded-b-none"
+      >
+        {history.map((msg, i) => (
+          // Usando el ChatBubble moderno que creaste antes
+          <ChatBubble key={i} speaker={msg.speaker} content={msg.content} />
+        ))}
+      </Card>
+
+      {/* Footer / Indicadores */}
+      <div className="mt-0 p-4 bg-white border-t rounded-b-lg shadow-xl text-sm text-center text-muted-foreground">
+        {running && (
+          <p className="opacity-70 animate-pulse">
+            {turn === 'openai' ? '🤖 OpenAI' : '🦙 LLaMA'} está escribiendo…
+          </p>
+        )}
+
+        {!running && history.length === MAX_TURNS && (
+          <p className="opacity-60">Conversación finalizada.</p>
+        )}
+        {!running && history.length === 0 && (
+           <p className="opacity-80">Pulsa "Iniciar" para comenzar la conversación automática.</p>
         )}
       </div>
     </main>

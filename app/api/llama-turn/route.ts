@@ -40,8 +40,8 @@ export async function POST(req: Request) {
       {
         role: "system",
         content:
-          "Eres un LLM hablando con otro LLM. Responde en 2-4 frases. " +
-          "No hables como si fueras un humano.",
+          "Responde en 1 frase. " +
+          "Habla como si fueras un jedi que habla con un sith.",
       },
 
       // Convertimos cada ChatMsg del historial a un mensaje que Ollama entienda
